@@ -229,6 +229,11 @@ function serializeForm(form, submitter = null)
                     }
                 }
                 break
+            case 'radio':
+                if(inp.checked) {
+                    fd.append(inp.name, inp.value)
+                }
+                break
         }
     })
 
@@ -278,4 +283,47 @@ function collect_attachments_node(target)
         vertical_array.push(`${_node.dataset.type}${_node.dataset.id}`)
     })
     vertical_input.nodes[0].value = vertical_array.join(',')
+}
+
+function short_geo_name(address_osm)
+{
+    let final_arr = []
+    if(address_osm.country) {
+        final_arr.push(address_osm.country)
+    }
+    if(address_osm.state) {
+        final_arr.push(address_osm.state)
+    }
+    if(address_osm.state_district) {
+        final_arr.push(address_osm.state_district)
+    }
+    if(address_osm.city) {
+        if(address_osm.city != address_osm.state) {
+            final_arr.push(address_osm.city)
+        }
+    } else if(address_osm.town) {
+        final_arr.push(address_osm.town)
+    }
+    if(address_osm.city_district) {
+        final_arr.push(address_osm.city_district)
+    }
+    if(address_osm.village) {
+        final_arr.push(address_osm.village)
+    }
+    if(address_osm.road) {
+        final_arr.push(address_osm.road)
+    }
+
+    return escapeHtml(final_arr.join(', '))
+}
+
+function expandText(item)
+{
+    if (item.parentElement.querySelector(".really_text").classList.contains("collapsed_text")) {
+        item.parentElement.querySelector(".really_text").classList.remove("collapsed_text")
+        item.textContent = tr("show_less")
+    } else {
+        item.parentElement.querySelector(".really_text").classList.add("collapsed_text")
+        item.textContent = tr("show_more")
+    }
 }

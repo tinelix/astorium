@@ -1,21 +1,24 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
+
 namespace openvk\Web\Presenters;
+
 use openvk\Web\Models\Repositories\ContentSearchRepository;
 
 final class ContentSearchPresenter extends OpenVKPresenter
 {
-    private $repo;
-    
-    function __construct(ContentSearchRepository $repo)
+    protected $repo;
+
+    public function __construct(ContentSearchRepository $repository)
     {
-        $this->repo = $repo;
+        $this->repo = $repository;
     }
-    
-    function renderIndex(): void
+
+    public function renderIndex(): void
     {
-        if($_SERVER["REQUEST_METHOD"] === "POST")
-        {
-            $this->template->results = $repo->find([
+        if ($_SERVER["REQUEST_METHOD"] === "POST") {
+            $this->template->results = $this->repo->find([
                 "query" => $this->postParam("query"),
             ]);
         }

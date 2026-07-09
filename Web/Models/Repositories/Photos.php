@@ -1,58 +1,71 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
+
 namespace openvk\Web\Models\Repositories;
+
 use openvk\Web\Models\Entities\{Photo, User};
 use Chandler\Database\DatabaseConnection;
+use Nette\Database\Table\ActiveRow;
 
 class Photos
 {
     private $context;
     private $photos;
-    
-    function __construct()
+
+    private static $cache = [];
+
+    public function __construct()
     {
         $this->context = DatabaseConnection::i()->getContext();
         $this->photos  = $this->context->table("photos");
     }
-    
-    function get(int $id): ?Photo
+
+    private function toPhoto(?ActiveRow $ar): ?Photo
     {
-        $photo = $this->photos->get($id);
-        if(!$photo) return NULL;
-        
-        return new Photo($photo);
+        return is_null($ar) ? null : new Photo($ar);
     }
-    
-    function getByOwnerAndVID(int $owner, int $vId): ?Photo
+
+    public function get(int $id): ?Photo
+    {
+        return self::$cache[$id] ??= $this->toPhoto($this->photos->get($id));
+    }
+
+    public function getByOwnerAndVID(int $owner, int $vId): ?Photo
     {
         $photo = $this->photos->where([
             "owner"      => $owner,
             "virtual_id" => $vId,
+            "system"     => 0,
+            "private"    => 0,
         ])->fetch();
-        if(!$photo) return NULL;
-        
-        return new Photo($photo);
+        return $this->toPhoto($photo);
     }
 
-    function getEveryUserPhoto(User $user, int $offset = 0, int $limit = 10): \Traversable
+    public function getEveryUserPhoto(User $user, int $offset = 0, int $limit = 10): \Traversable
     {
-        $perPage = $perPage ?? OPENVK_DEFAULT_PER_PAGE;
+        $perPage ??= OPENVK_DEFAULT_PER_PAGE;
         $photos = $this->photos->where([
-            "owner"   => $user->getId(),
-            "deleted" => 0
+            "owner"    => $user->getId(),
+            "deleted"  => 0,
+            "system"   => 0,
+            "private"  => 0,
+            "anonymous" => 0,
         ])->order("id DESC");
 
-        foreach($photos->limit($limit, $offset) as $photo) {
-            yield new Photo($photo);
+        foreach ($photos->limit($limit, $offset) as $photo) {
+            yield $this->toPhoto($photo);
         }
     }
 
-    function getUserPhotosCount(User $user) 
+    public function getUserPhotosCount(User $user)
     {
-        $photos = $this->photos->where([
-            "owner"   => $user->getId(),
-            "deleted" => 0
-        ]);
-
-        return sizeof($photos);
+        return $this->photos->where([
+            "owner"    => $user->getId(),
+            "deleted"  => 0,
+            "system"   => 0,
+            "private"  => 0,
+            "anonymous" => 0,
+        ])->count("*");
     }
 }

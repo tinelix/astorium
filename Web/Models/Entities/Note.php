@@ -1,13 +1,47 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
+
 namespace openvk\Web\Models\Entities;
+
 use HTMLPurifier_Config;
 use HTMLPurifier;
+use HTMLPurifier_Filter;
+
+class SecurityFilter extends HTMLPurifier_Filter
+{
+    public function preFilter($html, $config, $context)
+    {
+        $html = preg_replace_callback(
+            '/<img[^>]*src\s*=\s*["\']([^"\']*)["\'][^>]*>/i',
+            function ($matches) {
+                $originalSrc = $matches[1];
+                $src = $originalSrc;
+
+                if (OPENVK_ROOT_CONF["openvk"]["preferences"]["notes"]["disableHotlinking"] ?? true) {
+                    if (!str_contains($src, "/image.php?url=")) {
+                        $src = '/image.php?url=' . base64_encode($originalSrc);
+                    } /*else {
+                        $src = preg_replace_callback('/(.*)\/image\.php\?url=(.*)/i', function ($matches) {
+                            return base64_decode($matches[2]);
+                        }, $src);
+                    }*/
+                }
+
+                return str_replace($originalSrc, $src, $matches[0]);
+            },
+            $html
+        );
+
+        return $html;
+    }
+}
 
 class Note extends Postable
 {
     protected $tableName = "notes";
-    
-    protected function renderHTML(): string
+
+    protected function renderHTML(?string $content = null): string
     {
         $config = HTMLPurifier_Config::createDefault();
         $config->set("Attr.AllowedClasses", []);
@@ -74,76 +108,76 @@ class Note extends Postable
         $config->set("Attr.AllowedClasses", [
             "underline",
         ]);
-    
-        $source = NULL;
-        if(is_null($this->getRecord())) {
-            if(isset($this->changes["source"]))
-                $source = $this->changes["source"];
-            else
-                throw new \LogicException("Can't render note without content set.");
-        } else {
-            $source = $this->getRecord()->source;
+        $config->set('Filter.Custom', [new SecurityFilter()]);
+
+        $source = $content;
+        if (!$source) {
+            if (is_null($this->getRecord())) {
+                if (isset($this->changes["source"])) {
+                    $source = $this->changes["source"];
+                } else {
+                    throw new \LogicException("Can't render note without content set.");
+                }
+            } else {
+                $source = $this->getRecord()->source;
+            }
         }
-        
+
         $purifier = new HTMLPurifier($config);
         return $purifier->purify($source);
     }
-    
-    function getName(): string
+
+    public function getName(): string
     {
         return $this->getRecord()->name;
     }
-    
-    function getPreview(int $length = 25): string
+
+    public function getPreview(int $length = 25): string
     {
         return ovk_proc_strtr(strip_tags($this->getRecord()->source), $length);
     }
-    
-    function getText(): string
+
+    public function getText(): string
     {
-        if(is_null($this->getRecord()))
+        if (is_null($this->getRecord())) {
             return $this->renderHTML();
-        
+        }
+
         $cached = $this->getRecord()->cached_content;
-        if(!$cached) {
+        if (!$cached) {
             $cached = $this->renderHTML();
             $this->setCached_Content($cached);
             $this->save();
         }
-        
-        return $cached;
+
+        return $this->renderHTML($cached);
     }
 
-    function getSource(): string
+    public function getSource(): string
     {
         return $this->getRecord()->source;
     }
-    
-    function canBeViewedBy(?User $user = NULL): bool
+
+    public function canBeViewedBy(?User $user = null): bool
     {
-        if($this->isDeleted() || $this->getOwner()->isDeleted()) {
+        if ($this->isDeleted() || $this->getOwner()->isDeleted()) {
             return false;
         }
 
         return $this->getOwner()->getPrivacyPermission('notes.read', $user) && $this->getOwner()->canBeViewedBy($user);
     }
 
-    function toVkApiStruct(): object
+    public function toVkApiStruct(): object
     {
         $res = (object) [];
 
-        $res->type          = "note";
         $res->id            = $this->getVirtualId();
         $res->owner_id      = $this->getOwner()->getId();
         $res->title         = $this->getName();
         $res->text          = $this->getText();
         $res->date          = $this->getPublicationTime()->timestamp();
         $res->comments      = $this->getCommentsCount();
-        $res->read_comments = $this->getCommentsCount();
-        $res->view_url      = "/note".$this->getOwner()->getId()."_".$this->getVirtualId();
-        $res->privacy_view  = 1;
-        $res->can_comment   = 1;
-        $res->text_wiki     = "r";
+        $res->view_url      = "/note" . $this->getOwner()->getId() . "_" . $this->getVirtualId();
 
         return $res;
     }

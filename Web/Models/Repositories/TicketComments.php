@@ -1,39 +1,48 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
+
 namespace openvk\Web\Models\Repositories;
+
 use openvk\Web\Models\Entities\TicketComment;
+use Nette\Database\Table\ActiveRow;
 use Chandler\Database\DatabaseConnection;
 
 class TicketComments
 {
+    use \Nette\SmartObject;
     private $context;
     private $comments;
-    
-    function __construct()
+
+    private static $cache = [];
+
+    public function __construct()
     {
         $this->context = DatabaseConnection::i()->getContext();
         $this->comments = $this->context->table("tickets_comments");
     }
-    
-    function getCommentsById(int $ticket_id): \Traversable
+
+    public function getCommentsById(int $ticket_id): \Traversable
     {
-        foreach($this->comments->where(['ticket_id' => $ticket_id, 'deleted' => 0]) as $comment) yield new TicketComment($comment);
+        foreach ($this->comments->where(['ticket_id' => $ticket_id, 'deleted' => 0]) as $comment) {
+            yield new TicketComment($comment);
+        }
     }
 
-    function get(int $id): ?TicketComment
+    private function toTicketComment(?ActiveRow $ar): ?TicketComment
     {
-        $comment = $this->comments->get($id);;
-        if (!is_null($comment))
-            return new TicketComment($comment);
-        else
-            return NULL;
+        return is_null($ar) ? null : new TicketComment($ar);
     }
 
-    function getCountByAgent(int $agent_id, int $mark = NULL): int
+    public function get(int $id): ?TicketComment
+    {
+        return self::$cache[$id] ??= $this->toTicketComment($this->comments->get($id));
+    }
+
+    public function getCountByAgent(int $agent_id, int $mark = null): int
     {
         $filter = ['user_id' => $agent_id, 'user_type' => 1];
         $mark && $filter['mark'] = $mark;
         return sizeof($this->comments->where($filter));
     }
-   
-    use \Nette\SmartObject;
 }

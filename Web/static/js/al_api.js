@@ -12,11 +12,19 @@ window.API = new Proxy(Object.create(null), {
                         xhr.responseType = "arraybuffer";
 
                         xhr.onload = e => {
-                            let resp = msgpack.decode(new Uint8Array(e.target.response));
-                            if(typeof resp.error !== "undefined")
-                                rej(resp.error);
-                            else
-                                resolv(resp.result);
+                            try {
+                                let resp = msgpack.decode(new Uint8Array(e.target.response));
+                                if(typeof resp.error !== "undefined")
+                                    rej(resp.error);
+                                else
+                                    resolv(resp.result);
+                            } catch (e) {
+                                rej({
+                                    "code": -1,
+                                    "message": `Network error`,
+                                    "error": e
+                                })
+                            }
                         };
 
                         xhr.send(msgpack.encode({
@@ -42,8 +50,22 @@ window.OVKAPI = new class {
             return
         }
 
-        const url = `/method/${method}?auth_mechanism=roaming&${new URLSearchParams(params).toString()}&v=5.200`
-        const res = await fetch(url)
+        const form_data = new FormData
+        Object.entries(params).forEach(fd => {
+            form_data.append(fd[0], fd[1])
+        })
+
+        const __url_params = new URLSearchParams
+        __url_params.append("v", "5.200")
+        if(window.openvk.current_id != 0) {
+            __url_params.append("auth_mechanism", "roaming")
+        }
+
+        const url = `/method/${method}?${__url_params.toString()}`
+        const res = await fetch(url, {
+            method: "POST",
+            body: form_data,
+        })
         const json_response = await res.json()
 
         if(json_response.response) {

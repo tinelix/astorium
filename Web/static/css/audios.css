@@ -25,7 +25,7 @@
 /* Main music player */
 
 .bigPlayer {
-    background-color: rgb(240, 241, 242);
+    background-color: var(--common-2);
     margin-left: -10px;
     margin-top: -10px;
     width: 102.8%;
@@ -50,6 +50,73 @@
     grid-template-columns: 0fr 3fr 1fr 0fr;
     align-items: center;
     height: 46px;
+}
+
+.bigPlayer .bigPlayerWrapper .absoluteButtons {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+}
+
+.bigPlayer #album_info {
+    display: none;
+    position: absolute;
+    top: 46px;
+    left: 0;
+    width: 70%;
+    background: var(--common-2);
+    margin-left: -1px;
+    padding: 15px 14px 17px 15px;
+    border: 1px solid #d8d8d8;
+    border-top: unset;
+    box-shadow: 0px 10px 8px 0px #2b2b2b33;
+}
+
+.bigPlayer.album_shown #album_info {
+    display: block;
+    font-size: 10px;
+}
+
+.bigPlayer.album_shown #album_info a {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+}
+
+.bigPlayer.album_shown #album_info a, 
+.bigPlayer.album_shown #album_info span {
+    height: 8px;
+    font-size: 10px;
+}
+
+.bigPlayer.album_shown #album_info a span {
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.bigPlayer.album_shown #album_info img {
+    width: 27px;
+    border-radius: 1px;
+}
+
+.bigPlayer .bigPlayerWrapper .absoluteButtons > div {
+    min-width: 8px;
+    height: 8px;
+    font-size: 9px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ebebeb;
+    outline: 1px solid #c3c3c3;
+    color: #c3c3c3;
+    cursor: pointer;
+    user-select: none;
+}
+
+.bigPlayer .bigPlayerWrapper .absoluteButtons > div:active {
+    background: #c3c3c3;
+    color: #ebebeb;
 }
 
 /* Play button and arrows */
@@ -150,8 +217,8 @@
 }
 
 .bigPlayer .slider, .audioEmbed .track .slider {
-    width: 15px;
-    height: 7px;
+    width: 10px;
+    height: 6px;
     background: #606060;
     position: absolute;
     bottom: 0;
@@ -230,14 +297,15 @@
     cursor: pointer;
 }
 
+/* we do not need to set the manual width there */
 .bigPlayer .trackPanel .track .selectableTrack > div {
-    width: 96%;
+    width: 97.4%;
     position: relative;
 }
 
 .bigPlayer .volumePanel .selectableTrack > div {
     position: relative;
-    width: 77%;
+    width: 84%;
 }
 
 .audioEmbed .track > .selectableTrack, .bigPlayer .selectableTrack {
@@ -300,7 +368,8 @@
     border-radius: inherit !important;
 }
 
-.audioEntry.nowPlaying .performer a {
+.audioEntry.nowPlaying .performer a,
+.audioEntry.nowPlaying .performer {
     color: #f4f4f4 !important;
 }
 
@@ -312,7 +381,7 @@
     opacity: 0.8;
 }
 
-.audioEmbed.processed {
+.audioEmbed.processed .playerButton {
     filter: opacity(0.6);
 }
 
@@ -324,6 +393,7 @@
 }
 
 .audioEntry .nobold {
+    font-size: 10px;
     text-align: center;
     min-width: 28px;
 }
@@ -592,13 +662,25 @@
 }
 
 .playlistBlock {
+    display: flex;
+    gap: 13px;
     margin-top: 14px;
 }
 
+.playlistBlock .playlistCover {
+    max-width: 135px;
+}
+
 .playlistBlock .playlistWrapper {
-    float: left;
-    padding-left: 13px;
-    width:75%
+    width: 75%
+}
+
+.playlistBlock .playlistInfo h4 {
+    border-bottom: unset;
+}
+
+.playlistBlock .playlistInfo hr {
+    color: #f7f7f7;
 }
 
 .playlistCover .profile_links .profile_link {
@@ -631,13 +713,14 @@
 
 .playlistListView {
     display: flex;
-    padding: 7px;
-    gap: 9px;
+    padding: 12px;
+    gap: 13px;
     cursor: pointer;
+    border-radius: 2px;
 }
 
 .playlistListView:hover, .playlistListView .playlistCover {
-    background: #ebebeb;
+    background: var(--common-hover);
 }
 
 .playlistListView .playlistCover img {
@@ -663,6 +746,7 @@
 
 .playlistListView .playlistInfo .playlistMeta, .playlistListView .playlistInfo .playlistMeta span {
     color: #676767;
+    font-size: 10px;
 }
 
 /* other */
@@ -722,8 +806,9 @@
     fill-opacity: .7;
 }
 
-.audioStatus span {
+.audioStatus a {
     color: #2B587A;
+    font-weight: bold;
 }
 
 .audioStatus span:hover {
@@ -813,11 +898,11 @@
 }
 
 .friendsAudiosList .elem img {
-    width: 30px;
+    width: 26px;
     border-radius: 2px;
     object-fit: cover;
-    height: 31px;
-    min-width: 30px;
+    height: 26px;
+    min-width: 26px;
 }
 
 .friendsAudiosList .elem .additionalInfo {
@@ -833,6 +918,7 @@
 
 .friendsAudiosList .elem .additionalInfo .name {
     color: #2B587A;
+    font-size: 10px;
 }
 
 .friendsAudiosList #used .elem .additionalInfo .name {
@@ -844,7 +930,7 @@
     overflow: hidden;
     white-space: nowrap;
     color: #878A8F;
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .friendsAudiosList #used .elem .additionalInfo .desc {
@@ -904,16 +990,20 @@
     padding: 1px;
 }
 
-/* AJAX player */
+/* mini player */
 #ajax_audio_player {
-    transition: background .1s ease-out;
-    background: rgba(44, 44, 44, 0.7);
+    background: rgba(44, 44, 44, 0.8);
     padding: 1px;
     width: 500px;
     height: 37px;
     position: fixed;
     z-index: 1025;
     border-radius: 3px;
+}
+
+#ajax_audio_player,
+#ajax_audio_player #aj_player_tracks {
+    transition: background .1s ease-out;
 }
 
 #ajax_audio_player.hidden {
@@ -931,7 +1021,8 @@
     gap: 7px;
 }
 
-#ajax_audio_player.ui-draggable-dragging {
+#ajax_audio_player.ui-draggable-dragging,
+#ajax_audio_player.ui-draggable-dragging #aj_player_tracks {
     background: rgba(20, 20, 20, 0.9);
 }
 
@@ -988,6 +1079,10 @@
     color: white;
 }
 
+#ajax_audio_player #aj_player_track #aj_player_track_name #aj_player_track_title .tire {
+    display: inline;
+}
+
 #ajax_audio_player #aj_time {
     cursor: pointer;
 }
@@ -1022,6 +1117,7 @@
     flex-direction: row;
     align-items: center;
     gap: 10px;
+    opacity: 0.9;
 }
 
 #ajax_audio_player #aj_player_buttons #aj_player_previous {
@@ -1044,4 +1140,79 @@
     width: 15px;
     height: 12px;
     background-position: -214px -5px;
+}
+
+/* ajax audio player > queue */
+
+#ajax_audio_player #aj_player_tracks {
+    width: fit-content;
+    display: none;
+    flex-direction: column;
+
+    background: rgba(44, 44, 44, 0.79);
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 2px;
+    margin-left: 2px;
+    border-radius: 0px 0px 2px 2px;
+}
+
+#ajax_audio_player:hover #aj_player_tracks {
+    display: flex;
+}
+
+#ajax_audio_player #aj_player_tracks .aj_track {
+    padding: 3px 10px;
+}
+
+#ajax_audio_player #aj_player_tracks .aj_track span,
+#ajax_audio_player #aj_player_tracks .aj_track b {
+    color: #bdbdbda6;
+}
+
+#ajax_audio_player #aj_player_tracks .aj_track:hover {
+    background: #00000030;
+}
+
+#ajax_audio_player #aj_player_tracks .aj_track.selected {
+    background: #00000078;
+}
+
+#ajax_audio_player #aj_player_tracks::-webkit-scrollbar {
+    width: 2px;
+}
+
+#ajax_audio_player #aj_player_tracks .aj_track {
+    display: grid;
+    cursor: pointer;
+    grid-template-columns: 0fr 1fr;
+}
+
+#ajax_audio_player #aj_player_tracks .aj_track .num {
+    width: 12px;
+    display: block;
+    margin-right: 10px;
+    text-wrap: nowrap;
+}
+
+#ajax_audio_player #aj_player_tracks .aj_track.selected span, 
+#ajax_audio_player #aj_player_tracks .aj_track.selected b {
+    color: white;
+}
+
+/* Compact audios */
+
+.audiosContainer.winamp_mode {
+    padding: 1px 0px 1px 2px;
+    margin-right: 3px;
+}
+
+.audiosContainer.winamp_mode .audioEntry .audioEntryWrapper {
+    padding: 1px 14px;
+    height: unset;
+    margin-bottom: 1px;
+}
+
+.audiosContainer.winamp_mode .audioEntry .buttons {
+    right: 19px;
 }

@@ -1,5 +1,9 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
+
 namespace openvk\Web\Models\Repositories;
+
 use Nette\Database\Table\ActiveRow;
 use Chandler\Database\DatabaseConnection as DB;
 use openvk\Web\Models\Entities\User;
@@ -9,6 +13,10 @@ class ChandlerGroups
 {
     private $context;
     private $groups;
+    private $members;
+    private $perms;
+
+    private static $cache = [];
 
     public function __construct()
     {
@@ -18,36 +26,43 @@ class ChandlerGroups
         $this->perms   = $this->context->table("ChandlerACLGroupsPermissions");
     }
 
-    function get(string $UUID): ?ActiveRow
+    public function get(string $UUID): ?ActiveRow
     {
-        return $this->groups->where("id", $UUID)->fetch();
+        return self::$cache[$UUID] ??= $this->groups->where("id", $UUID)->fetch();
     }
 
-    function getList(): \Traversable
+    public function getList(): \Traversable
     {
-        foreach($this->groups as $group) yield $group;
+        foreach ($this->groups as $group) {
+            yield $group;
+        }
     }
 
-    function getMembersById(string $UUID): \Traversable
+    public function getMembersById(string $UUID): \Traversable
     {
-        foreach($this->members->where("group", $UUID) as $member)
-            yield (new Users)->getByChandlerUser(
+        foreach ($this->members->where("group", $UUID) as $member) {
+            yield (new Users())->getByChandlerUser(
                 new ChandlerUser($this->context->table("ChandlerUsers")->where("id", $member->user)->fetch())
             );
+        }
     }
 
-    function getUsersMemberships(string $UUID): \Traversable
+    public function getUsersMemberships(string $UUID): \Traversable
     {
-        foreach($this->members->where("user", $UUID) as $member) yield $member;
+        foreach ($this->members->where("user", $UUID) as $member) {
+            yield $member;
+        }
     }
 
-    function getPermissionsById(string $UUID): \Traversable
+    public function getPermissionsById(string $UUID): \Traversable
     {
-        foreach($this->perms->where("group", $UUID) as $perm) yield $perm;
+        foreach ($this->perms->where("group", $UUID) as $perm) {
+            yield $perm;
+        }
     }
 
-    function isUserAMember(string $GID, string $UID): bool
+    public function isUserAMember(string $GID, string $UID): bool
     {
-        return ($this->context->query("SELECT * FROM `ChandlerACLRelations` WHERE `group` = ? AND `user` = ?", $GID, $UID)) !== NULL;
+        return $this->context->query("SELECT * FROM `ChandlerACLRelations` WHERE `group` = ? AND `user` = ?", $GID, $UID)->getRowCount() > 0;
     }
 }

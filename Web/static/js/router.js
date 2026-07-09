@@ -102,15 +102,43 @@ window.router = new class {
         } else {
             if(u('.page_header').hasClass('search_expanded_at_all')) {
                 u('.page_header').removeClass('search_expanded_at_all').removeClass('search_expanded')
+            } else {
+                u('.page_header').removeClass('search_expanded')
             }
         }
         
         u("meta[name=csrf]").attr("value", u(parsed_content.querySelector('meta[name=csrf]')).attr('value'))
-        
-        document.title = parsed_content.title
+
+        if (isMobileAndExpanded()) {
+            document.body.classList.remove('menu-expanded')
+        }
+
+        if (isMobile() && document.querySelector('.mobile_title span') && parsed_content.querySelector('.mobile_title span')) {
+            document.querySelector('.mobile_title span').innerHTML = escapeHtml(parsed_content.querySelector('.mobile_title span').innerHTML)
+        }
+
+        window.setBaseTitle(parsed_content.title)
+
         scripts_to_append.forEach(append_me => {
             this.__appendScript(append_me)
         })
+    }
+
+    applyTweaks() {
+        if (window.tweaks != null) {
+            window.tweaks.forEach(item => {
+                const name = item.name
+
+                if (item.isEnabled()) {
+                    try {
+                        console.log(`Applied tweak ${name}`)
+                        item.func()
+                    } catch(e) {
+                        console.error(e)
+                    }
+                }
+            })
+        }
     }
 
     async __integratePage(scrolling = null) {
@@ -131,6 +159,13 @@ window.router = new class {
             window.player.dump()
             await window.player._handlePageTransition()
         }
+
+        this.applyTweaks()
+
+        /*window.document.dispatchEvent(new Event("DOMContentLoaded", {
+            bubbles: true,
+            cancelable: true
+        }))*/
     }
 
     __unlinkObservers() {
@@ -152,7 +187,7 @@ window.router = new class {
             return false
         }
 
-        if(!url || url == '' || url == '/') {
+        if(!url || url == '') {
             return false
         }
 
@@ -161,6 +196,10 @@ window.router = new class {
         }
 
         if(url.indexOf('hash=') != -1) {
+            return false
+        }
+
+        if(url.indexOf('#close') != -1) {
             return false
         }
 
@@ -196,7 +235,7 @@ window.router = new class {
         if(this.prev_page_html && this.prev_page_html.pathname != location.pathname) {
             this.prev_page_html = null
         }
-        
+
         const push_url = params.push_state ?? true
         const next_page_url = new URL(url)
         if(push_url) {
@@ -204,6 +243,8 @@ window.router = new class {
         } else {
             history.replaceState({'from_router': 1}, '', url)
         }
+        
+        u('body').addClass('ajax_request_made')
 
         const parser = new DOMParser
         const next_page_request = await fetch(next_page_url, {
@@ -221,6 +262,8 @@ window.router = new class {
         
         this.__closeMsgs()
         this.__unlinkObservers()
+        
+        u('body').removeClass('ajax_request_made')
 
         try {
             this.__appendPage(parsed_content)
@@ -233,14 +276,47 @@ window.router = new class {
     }
 }
 
+function isMobile() {
+    return window.innerWidth < 770
+}
+
+function isMobileAndExpanded() {
+    return isMobile() && document.body.classList.contains('menu-expanded');
+}
+
+// Mobile theme header
+u(document).on('click', '.page_header', (e) => {
+    if (isMobile() && !e.target.closest('.link, #fast_notifications')) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const ch = document.body.classList.contains('menu-expanded');
+        if (!ch) {
+            document.body.classList.add('menu-expanded');
+        } else {
+            document.body.classList.remove('menu-expanded');
+        }
+    }
+})
+
+function toDesktopVersion() {
+    u("link[href^='/assets/packages/static/openvk/css/mobile.css']").remove();
+    u("meta[name='viewport']").remove();
+}
+
 u(document).on('click', 'a', async (e) => {
+    if(e.defaultPrevented) {
+        console.log('AJAX | Skipping because default is prevented')
+        return
+    }
+    
     const target = u(e.target).closest('a')
     const dom_url = target.attr('href')
     const id = target.attr('id')
     let url = target.nodes[0].href
 
     if(id) {
-        if(['act_tab_a', 'ki', 'used', '_pinGroup', 'profile_link'].indexOf(id) == -1) {
+        if(['act_tab_a', 'ki', 'used', '_pinGroup', 'profile_link', 'minilink-friends', 'minilink-albums', 'minilink-messenger', 'minilink-groups', 'minilink-notifications'].indexOf(id) == -1) {
             console.log('AJAX | Skipping cuz maybe its function call link.')
             return
         }
@@ -266,13 +342,18 @@ u(document).on('click', 'a', async (e) => {
         return
     }
 
-    if(target.attr('target') == '_blank') {
+    if(target.attr('target') == '_blank' || e.ctrlKey || e.metaKey) {
         console.log('AJAX | Skipping because its _blank.')
         return
     }
 
     if(!window.router.checkUrl(url)) {
         return
+    }
+
+    // temporary fix
+    if(dom_url == '/') {
+        url = url + 'id0'
     }
 
     e.preventDefault()
@@ -284,13 +365,13 @@ u(document).on('click', 'a', async (e) => {
 })
 
 u(document).on('submit', 'form', async (e) => {
+    if(e.defaultPrevented) {
+        return
+    }
+  
     if(u('#ajloader').hasClass('shown')) {
         e.preventDefault()
         return
-    }
-
-    if((localStorage.getItem('ux.disable_ajax_routing') ?? 0) == 1 || window.openvk.current_id == 0) {
-        return false
     }
 
     if(window.openvk.disable_ajax == 1) {
@@ -300,6 +381,10 @@ u(document).on('submit', 'form', async (e) => {
     if(e.target.closest('#write')) {
         const target = u(e.target)
         collect_attachments_node(target)
+    }
+
+    if((localStorage.getItem('ux.disable_ajax_routing') ?? 0) == 1 || window.openvk.current_id == 0) {
+        return false
     }
 
     u('#ajloader').addClass('shown')
@@ -361,9 +446,24 @@ u(document).on('submit', 'form', async (e) => {
     }
     
     window.router.__appendPage(parsed_content)
+    window.router.__closeMsgs()
     await window.router.__integratePage()
 
     u('#ajloader').removeClass('shown')
+})
+
+u('#logout_link').on('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const msg = new CMessageBox({
+        title: tr('confirm'),
+        body: tr('menu_logout_confirm'),
+        buttons: [tr('yes'), tr('no')],
+        callbacks: [() => {
+            location.assign(e.target.href)
+        }, () => {}]
+    })
 })
 
 window.addEventListener('popstate', (e) => {
@@ -376,8 +476,14 @@ window.addEventListener('popstate', (e) => {
         return
     }*/
 
-    window.router.route({
-        url: location.href,
-        push_state: false,
-    })
+    if(e.state != null) {
+        window.router.route({
+            url: location.href,
+            push_state: false,
+        })
+    }
+})
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.router.applyTweaks()
 })

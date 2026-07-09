@@ -44,10 +44,18 @@ ADD . .
 ARG GITREPO=openvk/openvk
 FROM ghcr.io/${GITREPO}/php:8.2-apache
 
+ARG INSTALL_TEST_DEPS=
+RUN if [ -n "$INSTALL_TEST_DEPS" ]; then \
+        apt-get update -qq && \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq default-mysql-client curl && \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
+
 COPY --from=nodejs --chown=www-data:www-data /opt/chandler /opt/chandler
 
 RUN ln -s /opt/chandler/extensions/available/commitcaptcha/ /opt/chandler/extensions/enabled/commitcaptcha && \
     ln -s /opt/chandler/extensions/available/openvk/ /opt/chandler/extensions/enabled/openvk && \
+    ln -s /opt/chandler/extensions/available/openvk/install/automated/docker/docker-openvk-* /usr/local/bin && \
     rm -f /etc/apache2/sites-enabled/000-default.conf && \
     ln -s /opt/chandler/extensions/available/openvk/install/automated/common/10-openvk.conf /etc/apache2/sites-enabled/10-openvk.conf && \
     a2enmod rewrite
@@ -60,3 +68,6 @@ VOLUME [ "/opt/chandler/extensions/available/openvk/tmp/api-storage/videos" ]
 USER www-data
 
 WORKDIR /opt/chandler/extensions/available/openvk
+
+ENTRYPOINT [ "docker-openvk-entrypoint" ]
+CMD ["apache2-foreground"]

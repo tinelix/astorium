@@ -1,23 +1,31 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
+
 namespace openvk\Web\Models\Repositories;
+
 use Chandler\Database\DatabaseConnection;
+use Nette\Database\Table\ActiveRow;
 use openvk\Web\Models\Entities\Poll;
 
 class Polls
 {
     private $polls;
-    
-    function __construct()
+
+    private static $cache = [];
+
+    public function __construct()
     {
         $this->polls = DatabaseConnection::i()->getContext()->table("polls");
     }
-    
-    function get(int $id): ?Poll
+
+    private function toPoll(?ActiveRow $ar): ?Poll
     {
-        $poll = $this->polls->get($id);
-        if(!$poll)
-            return NULL;
-        
-        return new Poll($poll);
+        return is_null($ar) ? null : new Poll($ar);
+    }
+
+    public function get(int $id): ?Poll
+    {
+        return self::$cache[$id] ??= $this->toPoll($this->polls->get($id));
     }
 }

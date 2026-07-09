@@ -1,7 +1,11 @@
 {
+    "scripts": {
+        "fix": "php-cs-fixer fix",
+        "lint": "php-cs-fixer fix --dry-run --diff --verbose",
+        "analyse": "phpstan analyse --memory-limit 1G"
+    },
     "require": {
-        "php": "~7.3||~8.1",
-        "guzzlehttp/guzzle": "^6.5",
+        "php": "~8.2",
         "whichbrowser/parser": "dev-master",
         "james-heinrich/getid3": "^1.9@dev",
         "rybakit/msgpack": "dev-master",
@@ -20,7 +24,13 @@
         "wapmorgan/morphos": "dev-master",
         "ext-sodium": "*",
         "php81_bc/strftime": "^0.0.2",
-        "ext-iconv": "*"
+        "ext-iconv": "*",
+        "predis/predis": "^3.4"
     },
-    "minimum-stability": "beta"
+    "minimum-stability": "beta",
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.68",
+        "phpstan/phpstan": "^2.1",
+        "fakerphp/faker": "^1.24"
+    }
 }

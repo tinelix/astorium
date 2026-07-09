@@ -1,5 +1,9 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
+
 namespace openvk\Web\Models\Repositories;
+
 use Nette\Database\Table\ActiveRow;
 use Chandler\Database\DatabaseConnection as DB;
 use openvk\Web\Models\Entities\User;
@@ -10,6 +14,8 @@ class ChandlerUsers
     private $context;
     private $users;
 
+    private static $cache = [];
+
     public function __construct()
     {
         $this->context = DB::i()->getContext();
@@ -18,23 +24,24 @@ class ChandlerUsers
 
     private function toUser(?ActiveRow $ar): ?ChandlerUser
     {
-        return is_null($ar) ? NULL : (new User($ar))->getChandlerUser();
+        return is_null($ar) ? null : (new User($ar))->getChandlerUser();
     }
 
-    function get(int $id): ?ChandlerUser
+    public function get(int $id): ?ChandlerUser
     {
-        return (new Users)->get($id)->getChandlerUser();
+        return self::$cache[$id] ??= (new Users())->get($id)->getChandlerUser();
     }
 
-    function getById(string $UUID): ?ChandlerUser
+    public function getById(string $UUID): ?ChandlerUser
     {
         $user = $this->users->where("id", $UUID)->fetch();
-        return $user ? new ChandlerUser($user) : NULL;
+        return $user ? new ChandlerUser($user) : null;
     }
 
-    function getList(int $page = 1): \Traversable
+    public function getList(int $page = 1): \Traversable
     {
-        foreach($this->users as $user)
+        foreach ($this->users as $user) {
             yield new ChandlerUser($user);
+        }
     }
 }

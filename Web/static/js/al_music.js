@@ -42,6 +42,61 @@ class playersSearcher {
     }
 }
 
+class AudioTrack {
+    constructor(item) {
+        this.item = item
+    }
+
+    getTitle() {
+        return this.item.name
+    }
+
+    getPerformer() {
+        return this.item.performer
+    }
+
+    getPerformers() {
+        return this.item.performer.split(',')
+    }
+
+    getName() {
+        return `${this.item.performer} — ${this.item.name}`
+    }
+
+    getId() {
+        return this.item.id
+    }
+
+    getPlaylistCover() {
+        if (this.item.album) {
+            return this.item.album.cover_url
+        }
+
+        return "/assets/packages/static/openvk/img/song.jpg"
+    }
+
+    getPlaylistName() {
+        if (this.item.album) {
+            return this.item.album.title
+        }
+
+        return 'ovk audios'
+    }
+
+    getPlaylistURL() {
+        if (this.item.album) {
+            return '/playlist'+this.item.album.owner_id + '_' + this.item.album.id
+        }
+
+        return '#'
+    }
+
+    hasPlaylist() {
+        return this.item.album != null
+    }
+}
+
+// so if someone reads this. Its better to split class to AudioTrack -> AudioContext -> AudioPlayer -> AudioPlayerViewModel, AjaxPlayerViewModel and BigPlayerViewModel.
 window.player = new class {
     context = {
         object: {},
@@ -52,8 +107,11 @@ window.player = new class {
 
     __linked_player_id = null
     current_track_id = 0
+    _fading = false
     tracks = []
 
+    // 0 - shows remaining time before end
+    // 1 - shows full track time
     get timeType() {
         return localStorage.getItem('audio.timeType') ?? 0
     }
@@ -62,6 +120,7 @@ window.player = new class {
         localStorage.setItem('audio.timeType', value)
     }
 
+    // <audio> tag
     get audioPlayer() {
         return this.__realAudioPlayer
     }
@@ -137,6 +196,15 @@ window.player = new class {
         }
 
         this.audioPlayer.onvolumechange = () => {
+            if (this._fading == true) {
+                return
+            }
+
+            // Volume bar is useless on mobiles
+            if (window.isMobile && isMobile()) {
+                this.audioPlayer.volume = 1
+            }
+
             const volume = this.audioPlayer.volume;
             const ps = Math.ceil((volume * 100) / 1);
 
@@ -172,7 +240,7 @@ window.player = new class {
                 }
             }
 
-            if(window.player.listen_coef > 10) {
+            if(window.player.listen_coef > 5) {
                 this.__countListen()
                 window.player.listen_coef = -10
             }
@@ -220,7 +288,7 @@ window.player = new class {
                 form_data.append('context_entity', this.context.object.entity_id)
                 break
             case 'classic_search_context':
-                // tidi riwriti
+                // todo rewrite
                 form_data.append('context', this.context.object.name)
                 form_data.append('context_entity', JSON.stringify({
                     'order': this.context.object.order,
@@ -230,6 +298,9 @@ window.player = new class {
                     'with_lyrics': this.context.object.with_lyrics,
                     'query': this.context.object.query,
                 }))
+                break
+            case "uploaded":
+                form_data.append('context', this.context.object.name)
                 break
             case 'alone_audio':
                 form_data.append('context', this.context.object.name)
@@ -260,13 +331,13 @@ window.player = new class {
     }
 
     async setTrack(id, ref = null) {
-        if(!this.tracks || this.tracks.length < 1) {
+        if(!this.tracks/* || this.tracks.length < 1*/) {
             makeError('Context is not loaded yet', 'Red', 5000, 1489)
             return
         }
 
         if(window.__current_page_audio_context && (!this.context.object || this.context.object.url != location.pathname + location.search)) {
-            console.log('Audio | Resetting context because of ajax :3')
+            console.log('Audio | Resetting context because of ajax')
             
             this.__renewContext()
             await this.loadContext(window.__current_page_audio_context.page ?? 1)
@@ -287,7 +358,7 @@ window.player = new class {
         const c_track = this.currentTrack
         if(!c_track) {
             this.current_track_id = old_id
-            makeError('Error playing audio: track not found')
+            //makeError('Error playing audio: track not found')
             return
         }
         
@@ -307,11 +378,11 @@ window.player = new class {
         this.dashPlayer.initialize(this.audioPlayer, c_track.url, false);
         this.dashPlayer.setProtectionData(protData)
 
-        if(!this.nextTrack && Math.max(...this.context["playedPages"]) < this.context["pagesCount"]) {
+        if(!this.nextTrack && this.hasContext() && Math.max(...this.context["playedPages"]) < this.context["pagesCount"]) {
             await this.loadContext(Number(Math.max(...this.context["playedPages"])) + 1, true)
         }
 
-        if(!this.previousTrack && (Math.min(...this.context["playedPages"]) > 1)) {
+        if(!this.previousTrack && this.hasContext() && (Math.min(...this.context["playedPages"]) > 1)) {
             await this.loadContext(Math.min(...this.context["playedPages"]) - 1, false)
         }
 
@@ -322,6 +393,14 @@ window.player = new class {
         
         this.__updateFace()
         u(this.audioPlayer).trigger('volumechange')
+
+        if(this.isAtAudiosPage()) {
+            document.title = ovk_proc_strtr(escapeHtml(`${window.player.currentTrack.performer} — ${window.player.currentTrack.name}`), 255)
+        }
+    }
+
+    hasContext() {
+        return this.context.object && this.context.object.url
     }
 
     switchTracks(id1, id2) {
@@ -350,6 +429,7 @@ window.player = new class {
 
         document.querySelectorAll('audio').forEach(el => el.pause())
 
+        this._volumeFade(false)
         await this.audioPlayer.play()
         this.__setFavicon()
         this.__updateFace()
@@ -361,10 +441,51 @@ window.player = new class {
             return
         }
 
-        this.audioPlayer.pause()
+        this._volumeFade(true)
+
+        setTimeout(() => {
+            this.audioPlayer.pause()
+            this.__updateFace()
+        }, 150)
         this.__setFavicon('paused')
-        this.__updateFace()
         navigator.mediaSession.playbackState = "paused"
+    }
+
+    _volumeFade(down = false, interval = 15) {
+        const step = 0.03
+
+        if (!this.audioPlayer || this._fading) {
+            return
+        }
+
+        const current_volume = this.audioPlayer.volume
+
+        if (down) {
+            this.audioPlayer.volume = current_volume
+        } else {
+            this.audioPlayer.volume = 0
+        }
+
+        this._fading = true
+
+        const _i = setInterval(() => {
+            let done = false
+            if (down) {
+                this.audioPlayer.volume = Math.max(0, this.audioPlayer.volume - step)
+
+                done = this.audioPlayer.volume == 0
+            } else {
+                this.audioPlayer.volume = Math.min(1, this.audioPlayer.volume + step)
+
+                done = this.audioPlayer.volume >= current_volume
+            }
+
+            if (done) {
+                this.audioPlayer.volume = current_volume
+                this._fading = false
+                clearInterval(_i)
+            }
+        }, interval);
     }
 
     async playPreviousTrack() {
@@ -373,7 +494,7 @@ window.player = new class {
         }
 
         await this.setTrack(this.previousTrack.id)
-        if(!this.currentTrack.available || this.currentTrack.withdrawn) {
+        if(/*!this.currentTrack.available || */this.currentTrack.withdrawn) {
             if(!this.previousTrack) {
                 return
             }
@@ -390,7 +511,7 @@ window.player = new class {
         }
 
         await this.setTrack(this.nextTrack.id)
-        if(!this.currentTrack.available || this.currentTrack.withdrawn) {
+        if(/*!this.currentTrack.available || */this.currentTrack.withdrawn) {
             if(!this.nextTrack) {
                 return
             }
@@ -434,9 +555,9 @@ window.player = new class {
 
     async loadDump(dump_object) {
         this.context = dump_object.context
-        this.current_track_id = dump_object.current_track_id
         this.tracks = dump_object.tracks
-        if(this.current_track_id) {
+        if(dump_object.current_track_id && this.hasTrackWithId(dump_object.current_track_id)) {
+            this.current_track_id = dump_object.current_track_id
             await this.setTrack(this.current_track_id, 'localstorage')
         }
 
@@ -447,8 +568,11 @@ window.player = new class {
         }
     }
 
-    // Добавляем ощущение продуманности.
     __highlightActiveTrack() {
+        if(!this.isAtCurrentContextPage()) {
+            return
+        }
+
         u(`.audiosContainer .audioEmbed[data-realid='${this.current_track_id}'] .audioEntry, .audios_padding .audioEmbed[data-realid='${this.current_track_id}'] .audioEntry`).addClass('nowPlaying')
     }
 
@@ -488,11 +612,14 @@ window.player = new class {
                 if(this.audioPlayer.paused) {
                     return
                 }
+                if(!this.current_track_id || this.current_track_id == 0) {
+                    return
+                }
                 this.ajCreate()
                 this.__updateFace()
             }
         } else {
-            this.ajClose(false)
+            this.ajClose(false, false)
             this.is_closed = false
             if(this.tracks.length < 1) {
                 if(window.__current_page_audio_context) {
@@ -519,10 +646,18 @@ window.player = new class {
 
     __findTrack(id, return_index = false) {
         if(return_index) {
-            return this.tracks.indexOf(this.tracks.find(item => item.id == id))
+            try {
+                return this.tracks.indexOf(this.tracks.find(item => item.id == id))
+            } catch(e) {
+                return -1
+            }
         }
 
-        return this.tracks.find(item => item.id == id)
+        try {
+            return this.tracks.find(item => item.id == id)
+        } catch(e) {
+            return null
+        }
     }
 
     __findByIndex(index) {
@@ -549,14 +684,24 @@ window.player = new class {
         } else {
             this.tracks = list.concat(this.tracks)
         }
+
+        if (this.ajaxPlayer_CheckIfBlockHasBeenShown()) {
+            list.forEach(item => {
+                this.ajaxPlayer_AddTrackBlockToTheQueueBlock(item)
+            })
+        }
     }
 
     __updateFace() {
-        // Во второй раз перепутал next и back, но фиксить смысла уже нет.
-        const _c = this.currentTrack
+        let _c = null
+        if (this.currentTrack) { 
+            _c = new AudioTrack(this.currentTrack)
+        }
+
         const prev_button = this.uiPlayer.find('.nextButton')
         const next_button = this.uiPlayer.find('.backButton')
 
+        // Wow! A lot of shitcode!
         if(!this.previousTrack) {
             prev_button.addClass('lagged')
             if(this.ajaxPlayer.length > 0) {
@@ -602,9 +747,9 @@ window.player = new class {
         }
 
         if(_c) {
-            this.uiPlayer.find('.trackInfo .trackName span').html(escapeHtml(_c.name))
+            this.uiPlayer.find('.trackInfo .trackName span').html(escapeHtml(_c.getTitle()))
             this.uiPlayer.find('.trackInfo .trackPerformers').html('')
-            const performers = _c.performer.split(', ')
+            const performers = _c.getPerformers()
             const lastPerformer = performers[performers.length - 1]
             performers.forEach(performer => {
                 this.uiPlayer.find('.trackInfo .trackPerformers').append(
@@ -615,12 +760,30 @@ window.player = new class {
             this.uiPlayer.find('.trackInfo .trackPerformers').html(`<a>${tr('track_unknown')}</a>`)
         }
 
+        if (u('.bigPlayer #album_info').length > 0) {
+            if (_c.hasPlaylist() && u('.playlistInfo').length == 0) {
+                u('.bigPlayer').addClass('album_shown')
+                u('.bigPlayer #album_info img').attr('src', _c.getPlaylistCover())
+                u('.bigPlayer #album_info #album_embed_name').html(escapeHtml(ovk_proc_strtr(_c.getPlaylistName(), 60)))
+                u('.bigPlayer #album_info a').attr('href', _c.getPlaylistURL())
+            } else {
+                u('.bigPlayer').removeClass('album_shown')
+            }
+        }
+
         if(this.ajaxPlayer.length > 0) {
-            this.ajaxPlayer.find('#aj_player_track_title b').html(escapeHtml(_c.performer))
-            this.ajaxPlayer.find('#aj_player_track_title span').html(escapeHtml(_c.name))
+            if(_c) {
+                this.ajaxPlayer.find('#aj_player_track_title b').html(escapeHtml(_c.getPerformer()))
+                this.ajaxPlayer.find('#aj_player_track_title span').html(escapeHtml(_c.getTitle()))
+            }
         }
 
         u(`.tip_result`).remove()
+
+        if (this.ajaxPlayer_CheckIfBlockHasBeenShown()) {
+            u(".aj_track.selected").removeClass("selected")
+            this.ajaxPlayer.find(`.aj_track[data-id='${window.player.current_track_id}']`).addClass("selected")
+        }
     }
 
     __updateTime(new_time) {
@@ -631,15 +794,16 @@ window.player = new class {
             this.uiPlayer.find(".trackInfo .elapsedTime").html(getRemainingTime(this.currentTrack.length, new_time))
         }
     }
-
+    
     __updateMediaSession() {
         const album = document.querySelector(".playlistBlock")
-        const cur = this.currentTrack
+        const cur = new AudioTrack(this.currentTrack)
+
         navigator.mediaSession.metadata = new MediaMetadata({
-            title: escapeHtml(cur.name),
-            artist: escapeHtml(cur.performer),
-            album: album == null ? "OpenVK Audios" : escapeHtml(album.querySelector(".playlistInfo h4").innerHTML),
-            artwork: [{ src: album == null ? "/assets/packages/static/openvk/img/song.jpg" : album.querySelector(".playlistCover img").src }],
+            title: escapeHtml(cur.getName()),
+            artist: escapeHtml(cur.getPerformer()),
+            album: cur.getPlaylistName(),
+            artwork: [{ src: cur.getPlaylistCover()}],
         })
     }
 
@@ -672,10 +836,17 @@ window.player = new class {
         }
     }
 
-    ajClose(pause = true) {
+    ajClose(pause = true, clearTracks = true) {
         this.is_closed = true
         if(pause) {
             this.pause()
+        }
+        if(clearTracks) {
+            this.__resetContext()
+            this.__updateFace()
+            this.current_track_id = null
+            this.audioPlayer.currentTime = 0
+            this.undump()
         }
        
         u('#ajax_audio_player').addClass('hidden')
@@ -687,6 +858,43 @@ window.player = new class {
             this.ajCreate()
         }
         u('#ajax_audio_player').removeClass('hidden')
+    }
+
+    ajaxPlayer_CheckIfBlockHasBeenShown() {
+        return u('#ajax_audio_player').length > 0
+    }
+
+    ajaxPlayer_AddTrackBlockToTheQueueBlock(item) {
+        const track = new AudioTrack(item)
+
+        u("#ajax_audio_player #aj_player #aj_player_tracks").append(`
+            <div class="aj_track" data-id="${track.getId()}">
+                <span class="num">${this.tracks.findIndex(s => s.id == item.id) + 1}</span>
+                <b> ${ovk_proc_strtr(escapeHtml(track.getName()), 50)}</b>
+            </div>
+        `)
+    }
+
+    // TODO: When moving block to bottom of screen, show tracks list at the top
+    ajaxPlayer_ApplyQueueBlock() {
+        if(u("#ajax_audio_player #aj_player_tracks").length > 0) {return}
+        if(u("#ajax_audio_player").length == 0) {return}
+
+        u("#ajax_audio_player #aj_player").append(`
+            <div id="aj_player_tracks"></div>
+        `)
+
+        window.player.tracks.forEach(item => {
+            this.ajaxPlayer_AddTrackBlockToTheQueueBlock(item)
+        })
+
+        u("#aj_player_tracks").on("click", ".aj_track", async (e) => {
+            const id = e.target.closest(".aj_track").dataset.id
+
+            await window.player.setTrack(id)
+            window.player.play()
+        })
+        this.__updateFace()
     }
 
     ajCreate() {
@@ -701,13 +909,13 @@ window.player = new class {
                         </div>
                         <div id='aj_player_track'>
                             <div id='aj_player_track_name'>
-                                <a id='aj_player_track_title' class='noOverflow' style='width: 300px;'>
+                                <a id='aj_player_track_title' class='noOverflow' style='max-width: 300px;'>
                                     <b>Unknown</b>
-                                    —
+                                    <div class="tire">—</div>
                                     <span>Untitled</span>
                                 </a>
 
-                                <span id='aj_time'>00:00</span>
+                                <span id='aj_time' style='min-width: 28px;'>00:00</span>
                             </div>
                             <div id='aj_player_track_length'>
                                 <div class="selectableTrack">
@@ -758,6 +966,23 @@ window.player = new class {
                 }
             }
         })
+        this.ajaxPlayer_ApplyQueueBlock()
+    }
+
+    bigPlayer_toggleCountBlock() {
+        $(".summaryBarHideable").slideToggle(300, "linear")
+    }
+
+    bigPlayer_page_toggleCompactness() {
+        // this state is not saving
+        const btn = u('#summarySwitchButton')
+        if(btn.html() == "-") {
+            btn.html("+")
+        } else {
+            btn.html("-")
+        }
+
+        u('.audiosContainer').toggleClass('winamp_mode')
     }
 }
 
@@ -787,6 +1012,16 @@ window.addEventListener('beforeunload', (e) => {
     window.player.dump()
 })
 
+u(document).on("click", '.audioEntry .audioEntryWrapper .status', (e) => {
+    const target = u(e.target)
+    const wrapper = target.closest(".audioEmbed")
+    const play_button = wrapper.find(".playerButton .playIcon")
+
+    if (!e.target.matches("a, .withLyrics, .playIcon") && !wrapper.hasClass('processed')) {
+        play_button.nodes[0].click()
+    }
+})
+
 u(document).on('click', '.audioEntry .playerButton > .playIcon', async (e) => {
     const audioPlayer = u(e.target).closest('.audioEmbed')
     const id = Number(audioPlayer.attr('data-realid'))
@@ -800,19 +1035,14 @@ u(document).on('click', '.audioEntry .playerButton > .playIcon', async (e) => {
 
     if(!window.player.hasTrackWithId(id) && !window.player.isAtAudiosPage()) {
         let _nodes = null
-        if(u(e.target).closest('.attachments').length > 0) {
-            window.player.connectionType = '.attachments'
-            _nodes = u(e.target).closest('.attachments').find('.audioEmbed').nodes
-        } else if(u(e.target).closest('.content_list').length > 0) {
-            window.player.connectionType = '.content_list'
-            _nodes = u(e.target).closest('.content_list').find('.audioEmbed').nodes
-        } else if(u(e.target).closest('.generic_audio_list').length > 0) {
-            window.player.connectionType = '.generic_audio_list'
-            _nodes = u(e.target).closest('.generic_audio_list').find('.audioEmbed').nodes
-        } else if(u(e.target).closest('.audiosInsert').length > 0) {
-            window.player.connectionType = '.audiosInsert'
-            _nodes = u(e.target).closest('.audiosInsert').find('.audioEmbed').nodes
-        }
+
+        try_these_containers = [".attachments", ".content_list", ".generic_audio_list", ".audiosInsert", ".scroll_container", ".container_gray"]
+        try_these_containers.forEach(__container => {
+            if(u(e.target).closest(__container).length > 0) {
+                window.player.connectionType = __container
+                _nodes = u(e.target).closest(__container).find('.audioEmbed').nodes
+            }
+        })
 
         window.player.tracks = []
         _nodes.forEach(el => {
@@ -855,9 +1085,7 @@ u(document).on('click', '.audioEntry .playerButton > .playIcon', async (e) => {
         window.player.pause()
     }
     
-    if(window.player.isAtAudiosPage()) {
-        
-    } else {
+    if(!window.player.isAtAudiosPage()) {
         window.player.linkPlayer(audioPlayer)
         u('.audioEntry .subTracks.shown').removeClass('shown')
         audioPlayer.find('.subTracks').addClass('shown')
@@ -1113,6 +1341,9 @@ u(document).on("drop", '.audiosContainer', function(e) {
         e.dataTransfer.dropEffect = 'move'
     } else if(e.dataTransfer.types.length < 1 || e.dataTransfer.types.includes('text/uri-list')) {
         e.preventDefault()
+        if(window.player && !window.player.isAtCurrentContextPage()) {
+            return
+        }
 
         u('.audioEmbed.currently_dragging').removeClass('currently_dragging')
         const target = u(e.target).closest('.audioEmbed')
@@ -1129,21 +1360,41 @@ u(document).on("drop", '.audiosContainer', function(e) {
     } 
 })
 
+u(document).on("click", "#summarySwitchButton", (e) => {
+    window.player.bigPlayer_page_toggleCompactness()
+})
+
+// its not a good idea to put all logic into event functions, but ok.
 u(document).on('contextmenu', '.bigPlayer, .audioEmbed, #ajax_audio_player', (e) => {
+    if(e.shiftKey) {
+        return
+    }
+
     e.preventDefault()
 
     u('#ctx_menu').remove()
     const ctx_type = u(e.target).closest('.bigPlayer, #ajax_audio_player').length > 0 ? 'main_player' : 'mini_player'
-    const parent = e.target.closest('.ctx_place')
-    if(!parent) {
+    const ctxPlace = e.target.closest('.ctx_place')
+    if(!ctxPlace) {
         return
     }
+
+    const pageContent = e.target.closest('.page_content')
+    const parent = pageContent ?? ctxPlace
 
     const rect = parent.getBoundingClientRect()
     let x, y;
     let rx = rect.x + window.scrollX, ry = rect.y + window.scrollY
     x = e.pageX - rx
     y = e.pageY - ry
+
+    if(pageContent) {
+        if(e.clientY + 100 > window.innerHeight) {
+            y -= 100
+        }
+    } else if((rect.height + rect.top) + 100 > window.innerHeight) {
+        y = ((rect.height + 120) * -1)
+    }
 
     const ctx_u = u(`
         <div id='ctx_menu' style='top:${y}px;left:${x}px;' data-type='ctx_type'>
@@ -1154,13 +1405,14 @@ u(document).on('contextmenu', '.bigPlayer, .audioEmbed, #ajax_audio_player', (e)
             <a id='audio_ctx_mute' ${window.player.audioPlayer.muted ? `class='pressed'` : ''}>${tr('mute_tip_noun')}</a>
             ` : ''}
             ${ctx_type == 'mini_player' ? `
-            <a id='audio_ctx_play_next'>${tr('audio_ctx_play_next')}</a>    
+            <a style='display:none;' id='audio_ctx_play_next'>${tr('audio_ctx_play_next')}</a>
+            <a id='audio_ctx_link_playlist'>${tr('playlist')}</a>
             ` : ''}
             <a id='audio_ctx_add_to_group'>${tr('audio_ctx_add_to_group')}</a>
             <a id='audio_ctx_add_to_playlist'>${tr('audio_ctx_add_to_playlist')}</a>
-            ${ctx_type == 'main_player' ? `
-            <a id='audio_ctx_clear_context'>${tr('audio_ctx_clear_context')}</a>` : ''}
-            ${ctx_type == 'main_player' ? `<a href='https://github.com/mrilyew' target='_blank'>BigPlayer v1.1 by MrIlyew</a>` : ''}
+            ${ctx_type == 'main_player' ? `<a id='audio_ctx_clear_context'>${tr('audio_ctx_clear_context')}</a>` : ''}
+            ${ctx_type == 'main_player' ? `<a id='audio_ctx_show_count'>${tr('audio_ctx_show_count')}</a>` : ''}
+            ${ctx_type == 'main_player' ? `<a>BigPlayer v1.3</a>` : ''}
         </div>
     `)
     u(parent).append(ctx_u)
@@ -1259,6 +1511,85 @@ u(document).on('contextmenu', '.bigPlayer, .audioEmbed, #ajax_audio_player', (e)
         window.player.undump()
         window.router.route(old_url)
     })
+    ctx_u.find('#audio_ctx_show_count').on('click', (ev) => {
+        window.player.bigPlayer_toggleCountBlock()
+    })
+    ctx_u.find('#audio_ctx_link_playlist').on('click', async (ev) => {
+        let track_id = 0
+        let owner_id = 0
+        if(ctx_type == 'main_player') {
+            if(window.player.current_track_id == 0) {
+                return
+            }
+
+            track_id = window.player.current_track_id
+        } else {
+            const player = u(ev.target).closest('.audioEmbed')
+            track_id = Number(player.attr('data-realid'))
+            owner_id = Number(player.attr('data-owner-id'))
+        }
+
+        const audios = await window.OVKAPI.call('audio.getById', {
+            'audios': track_id
+        })
+        const audio = audios.items[0]
+        let id = audio.album_id
+        if (typeof id === 'string' && id.includes('_')) {
+             id = id.split('_')[1];
+        }
+
+        const final_owner_id = owner_id || audio.owner_id
+
+        if (!audio.editable) {
+            if (id) {
+                window.router.route('/playlist' + id)
+            }
+            return
+        }
+
+        const albums = await window.OVKAPI.call('audio.getAlbums', {
+            'count': 100,
+            'owner_id': final_owner_id
+        })
+
+        let options = `<option value="0">${tr('none')}</option>`
+        albums.items.forEach(album => {
+            const isSelected = (String(album.id) === String(id)) ? 'selected' : '';
+            options += `<option value="${album.id}" ${isSelected}>${escapeHtml(album.title)}</option>`
+        })
+
+        let body = u(`
+            <div>
+                <div>
+                    <div class="playlist_data"></div>
+                </div>
+                <div style="display: flex;align-items: center;gap: 3px;">
+                    <span>${tr('album')}</span>
+                    <select id="playlist_id" style="width: 50%;">
+                        ${options}
+                    </select>
+                </div>
+            </div>
+        `)
+        const msg = new CMessageBox({
+            title: tr('audio_edit_album'),
+            body: body.html(),
+            buttons: [tr('ok'), tr('cancel')],
+            callbacks: [async () => {
+                const new_id = msg.getNode().find('#playlist_id').nodes[0].value
+
+                try {
+                    await window.OVKAPI.call('audio.moveToAlbum', {
+                        'do_link': 1,
+                        'audio_ids': track_id,
+                        'album_id': new_id
+                    })
+                } catch(e) {
+                    makeError(e.message)
+                }
+            }, () => {}]
+        })
+    })
 })
 
 u(document).on("click", ".musicIcon.edit-icon", (e) => {
@@ -1268,16 +1599,17 @@ u(document).on("click", ".musicIcon.edit-icon", (e) => {
     const name = e.target.dataset.title
     const genre = player.dataset.genre
     const lyrics = e.target.dataset.lyrics
-    
-    MessageBox(tr("edit_audio"), `
-        <div>
+    const album_id = e.currentTarget.dataset.albumId
+    const owner_id = e.currentTarget.dataset.ownerId
+
+    MessageBox(tr("edit_audio"), `        <div>
             ${tr("performer")}
-            <input name="performer" maxlength="256" type="text" value="${performer}">
+            <input name="performer" maxlength="256" type="text" value="${escapeHtml(performer)}">
         </div>
 
         <div style="margin-top: 11px">
             ${tr("audio_name")}
-            <input name="name" maxlength="256" type="text" value="${name}">
+            <input name="name" maxlength="256" type="text" value="${escapeHtml(name)}">
         </div>
 
         <div style="margin-top: 11px">
@@ -1286,8 +1618,15 @@ u(document).on("click", ".musicIcon.edit-icon", (e) => {
         </div>
 
         <div style="margin-top: 11px">
+            ${tr("album")}
+            <select name="album_id">
+                <option value="0">${tr('none')}</option>
+            </select>
+        </div>
+
+        <div style="margin-top: 11px">
             ${tr("lyrics")}
-            <textarea name="lyrics" maxlength="5000" style="max-height: 200px;">${lyrics ?? ""}</textarea>
+            <textarea name="lyrics" maxlength="5000" style="resize: vertical; max-height: 285px;">${lyrics ?? ""}</textarea>
         </div>
 
         <div style="margin-top: 11px">
@@ -1301,6 +1640,7 @@ u(document).on("click", ".musicIcon.edit-icon", (e) => {
             const t_name   = $(".ovk-diag-body input[name=name]").val();
             const t_perf   = $(".ovk-diag-body input[name=performer]").val();
             const t_genre  = $(".ovk-diag-body select[name=genre]").val();
+            const t_album  = $(".ovk-diag-body select[name=album_id]").val();
             const t_lyrics = $(".ovk-diag-body textarea[name=lyrics]").val();
             const t_explicit = document.querySelector(".ovk-diag-body input[name=explicit]").checked;
             const t_unlisted = document.querySelector(".ovk-diag-body input[name=searchable]").checked;
@@ -1312,6 +1652,7 @@ u(document).on("click", ".musicIcon.edit-icon", (e) => {
                     name: t_name,
                     performer: t_perf,
                     genre: t_genre,
+                    album_id: t_album,
                     lyrics: t_lyrics,
                     unlisted: Number(t_unlisted),
                     explicit: Number(t_explicit),
@@ -1325,9 +1666,10 @@ u(document).on("click", ".musicIcon.edit-icon", (e) => {
                         
                         e.target.setAttribute("data-performer", escapeHtml(response.new_info.performer))
                         e.target.setAttribute("data-title", escapeHtml(response.new_info.name))
-                        e.target.setAttribute("data-lyrics", response.new_info.lyrics_unformatted)
+                        e.target.setAttribute("data-lyrics", escapeHtml(response.new_info.lyrics_unformatted))
                         e.target.setAttribute("data-explicit", Number(response.new_info.explicit))
                         e.target.setAttribute("data-searchable", Number(!response.new_info.unlisted))
+                        e.target.setAttribute("data-album-id", t_album)
                         player.setAttribute("data-genre", response.new_info.genre)
                         
                         let name = player.querySelector(".title")
@@ -1340,7 +1682,7 @@ u(document).on("click", ".musicIcon.edit-icon", (e) => {
                             } else {
                                 player.insertAdjacentHTML("beforeend", `
                                     <div class="lyrics">
-                                        ${response.new_info.lyrics}
+                                        ${escapeHtml(response.new_info.lyrics)}
                                     </div>
                                 `)
     
@@ -1379,6 +1721,16 @@ u(document).on("click", ".musicIcon.edit-icon", (e) => {
             <option value="${elGenre}" ${elGenre == genre ? "selected" : ""}>${elGenre}</option>
         `)
     })
+
+    const album_select = document.querySelector(".ovk-diag-body select[name=album_id]");
+    (async () => {
+        const res = await window.OVKAPI.call('audio.getAlbums', {'count': 100, 'owner_id': owner_id})
+        res.items.forEach(album => {
+            album_select.insertAdjacentHTML("beforeend", `
+                <option value="${album.id}" ${String(album.id) === String(album_id) ? "selected" : ""}>${escapeHtml(album.title)}</option>
+            `)
+        })
+    })()
 
     u(".ovk-diag-body #_fullyDeleteAudio").on("click", (e) => {
         MessageBox(tr('confirm'), tr('confirm_deleting_audio'), [tr('yes'), tr('no')], [() => {
@@ -1567,7 +1919,7 @@ function __showAudioAddDialog(id, current_tab = 'club') {
                     u('.entity_vertical_list').append(`<div id='gif_loader'></div>`)
 
                     try {
-                        window.openvk.writeableClubs = await API.Groups.getWriteableClubs()
+                        window.openvk.writeableClubs = await window.OVKAPI.call('groups.get', {'filter': 'admin', 'count': 100, 'fields': 'photo_50'})
                     } catch (e) {
                         u("#_content").html(tr("no_access_clubs"))
             
@@ -1577,12 +1929,12 @@ function __showAudioAddDialog(id, current_tab = 'club') {
                     u('.entity_vertical_list #gif_loader').remove()
                 }
                 
-                window.openvk.writeableClubs.forEach(el => {
+                window.openvk.writeableClubs.items.forEach(el => {
                     u("#_content .entity_vertical_list").append(`
                     <label class='entity_vertical_list_item with_third_column' data-id='${el.id}'>
                         <div class='first_column'>
                             <a href='/club${el.id}' class='avatar'>
-                                <img src='${el.avatar}' alt='avatar'>
+                                <img src='${el.photo_50}' alt='avatar'>
                             </a>
 
                             <div class='info'>
@@ -1786,7 +2138,7 @@ function showAudioAttachment(type = 'form', form = null)
             }
             let is_attached = false
             if(type == 'form') {
-                is_attached = (u(form).find(`.post-vertical .vertical-attachment[data-id='${id}']`)).length > 0
+                is_attached = (u(form).find(`.post-vertical .vertical-attachment[data-type='audio'][data-id='${id}']`)).length > 0
             } else {
                 is_attached = (u(form).find(`.PE_audios .vertical-attachment[data-id='${id}']`)).length > 0
             }
@@ -1914,8 +2266,12 @@ $(document).on("click", ".audioEmbed.processed .playerButton", (e) => {
         title: tr('error'),
         body: tr('audio_embed_processing'),
         unique_name: 'processing_notify',
-        buttons: [tr('ok')],
-        callbacks: [Function.noop]
+        buttons: [tr("audio_embed_processing_bait"), tr('ok')],
+        callbacks: [() => {
+            const pl = u(e.target).closest(".audioEmbed")
+            pl.removeClass("processed")
+            pl.find(".playIcon").trigger("click")
+        }, Function.noop]
     })
 })
 
@@ -1992,7 +2348,6 @@ u(document).on('click', '.upload_container_element #small_remove_button', (e) =>
         return
     }
 
-    // 1984
     const element = u(e.target).closest('.upload_container_element')
     const element_index = Number(element.attr('data-index'))
     
@@ -2110,10 +2465,10 @@ u(document).on('click', '.PE_end #playlist_create, .PE_end #playlist_edit', asyn
     u('.PE_audios .vertical-attachment').nodes.forEach(vatch => {
         ids.push(vatch.dataset.id)
     })
-    if(!ids || ids.length < 1) {
+    /*if(!ids || ids.length < 1) {
         makeError(tr('error_playlist_creating_too_small'), 'Red', 5000, 77)
         return
-    }
+    }*/
 
     u(e.target).addClass('lagged')
     const fd = serializeForm(u('.PE_playlistEditPage').nodes[0])

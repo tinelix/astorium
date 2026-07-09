@@ -11,6 +11,10 @@ function expand_comment_textarea(id) {
 
 function hidePanel(panel, count = 0)
 {
+    if (isMobile()) {
+        return;
+    }
+
     $(panel).toggleClass("content_title_expanded content_title_unexpanded");
     $(panel).next('div').slideToggle(300);
     if(count != 0){
@@ -66,7 +70,7 @@ function showCoinsTransferDialog(coinsCount, hash) {
             ${tr("points_transfer_dialog_header_2")} <b>${tr("points_amount", coinsCount)}</b>
         </div>
         <form action="/coins_transfer" method="post" id="coins_transfer_form" style="margin-top: 30px">
-            <table cellspacing="7" cellpadding="0" border="0" align="center">
+            <table class="flexible_table" cellspacing="7" cellpadding="0" border="0" align="center">
                 <tbody>
                     <tr>
                         <td width="120" valign="top">
@@ -194,7 +198,7 @@ function showIncreaseRatingDialog(coinsCount, userUrl, hash) {
             <a href="/settings?act=finance.top-up">${tr("apply_voucher")} &raquo;</a>
         </div>
         <form action="/increase_social_credits" method="post" id="increase_rating_form" style="margin-top: 30px">
-            <table cellspacing="7" cellpadding="0" border="0" align="center">
+            <table class="flexible_table" cellspacing="7" cellpadding="0" border="0" align="center">
                 <tbody>
                     <tr>
                         <td width="120" valign="top">
@@ -257,14 +261,118 @@ function showIncreaseRatingDialog(coinsCount, userUrl, hash) {
     };
 }
 
+function openJsSettings() {
+    const CURRENT_AUTO_SCROLL = Number(localStorage.getItem('ux.auto_scroll') ?? 1)
+    const CURRENT_DISABLE_AJAX = Number(localStorage.getItem('ux.disable_ajax_routing') ?? 0)
+
+    u("#_js_settings").append(`
+        <tr>
+            <td width="120" valign="top">
+                <span class="nobold">
+                    <input type='checkbox' data-act='localstorage_item' data-inverse="1" name='ux.disable_ajax_routing' id="ux.disable_ajax_routing" ${CURRENT_DISABLE_AJAX == 0 ? 'checked' : ''}>
+                </span>
+            </td>
+            <td>
+                <label for='ux.disable_ajax_routing'>${tr('ajax_routing')}</label>
+            </td>
+        </tr>
+        <tr>
+            <td width="120" valign="top">
+                <span class="nobold">
+                    <input type='checkbox' data-act='localstorage_item' name='ux.auto_scroll' id="ux.auto_scroll" ${CURRENT_AUTO_SCROLL == 1 ? 'checked' : ''}>
+                </span>
+            </td>
+            <td>
+                <label for='ux.auto_scroll'>${tr('auto_scroll')}</label>
+            </td>
+        </tr>    
+        <tr>
+            <td width="120" valign="top"></td>
+            <td>
+                <a href="javascript:openPluginSettings()">${tr('ui_settings_window')}</a>
+            </td>
+        </tr>  
+    `)
+}
+
+function saveTimezoneSettings() {
+    let tz = u('select#timezone').last().value;
+
+    xhr = new XMLHttpRequest();
+    xhr.open("POST", "/iapi/timezone", true);
+    xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    xhr.onload = (response) => {
+        if(JSON.parse(response.currentTarget.responseText).success != 0) {
+            const msg = new CMessageBox({
+                title: tr('success'),
+                body: tr('timezone_change_success'),
+                buttons: [tr('ok')],
+                callbacks: [() => {}]
+            })
+        }
+    };
+    xhr.send('timezone=' + tz);
+}
+
+let lastScrollTop = 0;
 $(document).on("scroll", () => {
-    if($(document).scrollTop() > $(".sidebar").height() + 50) {
-        $(".floating_sidebar")[0].classList.add("show");
-    } else if($(".floating_sidebar")[0].classList.contains("show")) {
-        $(".floating_sidebar")[0].classList.remove("show");
-        $(".floating_sidebar")[0].classList.add("hide_anim");
-        setTimeout(() => {
-            $(".floating_sidebar")[0].classList.remove("hide_anim");
-        }, 250);
+    const currentScrollTop = $(document).scrollTop();
+    const navigation = $(".navigation");
+
+    if (window.isMobile && isMobile()) {
+        return;
     }
+
+    if(navigation.find("#fastLogin").length > 0) return;
+
+    const scrollNavigation = (top) => {
+        navigation.css("top", top + "px");
+        navigation[0].classList.add("navigation-fixed");
+    }
+
+    const hideNavigationOutbound = (height) => {
+        navigation.css("top", height + "px");
+        navigation[0].classList.remove("navigation-fixed");
+    }
+
+    const removeFixedNavigation = () => {
+        navigation.css("top", "");
+        navigation[0].classList.remove("navigation-fixed");
+    }
+
+    let top = parseInt(navigation.css("top"), 10);
+
+    if(currentScrollTop > $(".sidebar").height() + 50) {
+        if(currentScrollTop < lastScrollTop) {
+            if(top !== 5) {
+                scrollNavigation(Math.min(5, (top + (lastScrollTop - currentScrollTop))));
+            }
+
+            $(".floating_sidebar")[0].classList.remove("show");
+            $(".floating_sidebar")[0].classList.add("hide_anim");
+            setTimeout(() => {
+                $(".floating_sidebar")[0].classList.remove("hide_anim");
+            }, 250);
+        } else {
+            let h = -navigation.height();
+            if(top <= h || top === 0) {
+                hideNavigationOutbound(h);
+                $(".floating_sidebar")[0].classList.add("show");
+            } else {
+                scrollNavigation((top - (currentScrollTop - lastScrollTop)));
+            }
+        }
+    } else {
+        removeFixedNavigation();
+
+        if($(".floating_sidebar")[0].classList.contains("show")) {
+            $(".floating_sidebar")[0].classList.remove("show");
+            $(".floating_sidebar")[0].classList.add("hide_anim");
+            setTimeout(() => {
+                $(".floating_sidebar")[0].classList.remove("hide_anim");
+            }, 250);
+        }
+    }
+
+    lastScrollTop = Math.max(0, currentScrollTop);
 })

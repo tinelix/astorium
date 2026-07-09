@@ -4,7 +4,13 @@ openvk:
         name: "OpenVK"
         motd: "Yet another OpenVK instance"
     
+    mirrors: # list all existing and previous domains without www. Won't work with different port
+        - "ovk.localhost"
+        - "ovk.local"
+
+
     preferences:
+        defaultLanguage: "ru"
         femaleGenderPriority: true
         nginxCacheTime: null
         uploads:
@@ -22,6 +28,9 @@ openvk:
             photoSaving: "quick"
         videos:
             disableUploading: false
+        docs:
+            maxSize: 10 # in megabytes
+            allowedFormats: ["jpg", "jpeg", "png", "gif", "webp", "psd", "aep", "docx", "doc", "odt", "txt", "md", "pptx", "ppt", "xls", "xlsx", "pdf", "djvu", "fb2", "ps", "apk", "zip", "7z", "mp4", "avi", "mp3", "flac"]
         apps:
             withdrawTax: 8
         security:
@@ -38,9 +47,25 @@ openvk:
                 maxViolations: 50
                 maxViolationsAge: 120
                 autoban: true
+                eventsLimit:
+                    enable: true
+                    ignoreForAdmins: true
+                    restrictionTime: 86400
+                    list:
+                        groups.create: 5
+                        groups.sub: 50
+                        friends.outgoing_sub: 25
+                        wall.post: 5000
+                        gifts.send: 30
+        blacklists:
+            limit: 100
+            applyToAdmins: true
         registration:
             enable: true
             disablingReason: ""
+            emailWhitelist:
+                enable: false
+                allowedHosts: []
         support:
             supportName: "Agent"
             adminAccount: 1 # Change this ok
@@ -54,6 +79,9 @@ openvk:
             exposeOriginalURLs: true
         newsfeed:
             ignoredSourcesLimit: 50
+        notes:
+            disableHotlinking: true
+            allowedHosts: []
         wall:
             christian: false
             anonymousPosting:
@@ -72,6 +100,8 @@ openvk:
             all: false
             photos: false
             videos: false
+            audios: false
+            documents: false
             messenger: false
             user: false
             group: false
@@ -103,11 +133,18 @@ openvk:
             src: "https://example.org/ad_poster.jpeg"
             caption: "Ad caption"
             link: "https://example.org/product.aspx?id=10&from=ovk"
+        siteAlert:
+            enable: false
+            text: "Global alert example <b>with HTML</b>"
+            canBeDismissed: true
         bellsAndWhistles:
             testLabel: false
         defaultMobileTheme: ""
         defaultFeaturePhoneTheme: ""
         logs: true
+        news:
+            show: false
+            groupId: 1
     
     telemetry:
         plausible:
@@ -141,7 +178,10 @@ openvk:
                 password: "DATABASE_PASSWORD"
         notificationsBroker:
             enable: false
-            kafka:
+            redis:
                 addr: "127.0.0.1"
-                port: 9092
-                topic: "OvkEvents"
+                port: 6379
+                password: ""
+            stream:
+                maxlen: 1000         # Maximum notifications in memory at once
+                prefix: "ovk_notifs"

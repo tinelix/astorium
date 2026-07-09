@@ -43,6 +43,53 @@ u(document).on("click", "#__ignoreSomeone", async (e) => {
     }
 })
 
+u(document).on("click", "#__ignoreSomeoneFeed", async (e) => {
+    e.preventDefault()
+
+    const TARGET = u(e.target)
+    const ENTITY_ID = Number(e.target.dataset.id)
+    const VAL = Number(e.target.dataset.val)
+    const ACT = VAL == 1 ? 'ignore' : 'unignore'
+    const METHOD_NAME = ACT == 'ignore' ? 'addBan' : 'deleteBan'
+    const PARAM_NAME = ENTITY_ID < 0 ? 'group_ids' : 'user_ids'
+    const ENTITY_NAME = ENTITY_ID < 0 ? 'club' : 'user'
+    const URL = `/method/newsfeed.${METHOD_NAME}?auth_mechanism=roaming&${PARAM_NAME}=${Math.abs(ENTITY_ID)}`
+    
+    TARGET.closest('.post').addClass('lagged')
+    const REQ = await fetch(URL)
+    const RES = await REQ.json()
+    TARGET.closest('.post').removeClass('lagged')
+
+    if(RES.error_code) {
+        switch(RES.error_code) {
+            case -10:
+                fastError(';/')
+                break
+            case -50:
+                fastError(tr('ignored_sources_limit'))
+                break
+            default:
+                fastError(res.error_msg)
+                break
+        }
+        return
+    }
+
+    if(RES.response == 1) {
+        if(ACT == 'unignore') {
+            TARGET.closest('.scroll_node').find('.post').removeClass('post-hidden');
+            TARGET.closest('.ignore-message').remove()
+        } else {
+            TARGET.closest('.post').addClass('post-hidden');
+            TARGET.closest('.scroll_node').append(`
+                <div class="ignore-message" width="100%">
+                    ${tr(`feed_${ENTITY_NAME}_ignored`)} <a id="__ignoreSomeoneFeed" data-val='0' data-id='${ENTITY_ID}' href="#">${tr('feed_unignore')}</a>
+                </div>
+            `)
+        }
+    }
+})
+
 u(document).on('click', '#__feed_settings_link', (e) => {
     e.preventDefault()
 
@@ -68,7 +115,7 @@ u(document).on('click', '#__feed_settings_link', (e) => {
     `
 
     MessageBox(tr("feed_settings"), body, [tr("close")], [Function.noop])
-    u('.ovk-diag-body').attr('style', 'padding:0px;height: 255px;')
+    u('.ovk-diag-body').attr('style', 'padding:0px;height: 255px;overflow: hidden;')
 
     async function __switchTab(tab) 
     {
@@ -84,10 +131,10 @@ u(document).on('click', '#__feed_settings_link', (e) => {
                 const CURRENT_PERPAGE = Number(__temp_url.searchParams.get('posts') ?? 10)
                 const CURRENT_PAGE = Number(__temp_url.searchParams.get('p') ?? 1)
                 const CURRENT_RETURN_BANNED = Number(__temp_url.searchParams.get('return_banned') ?? 0)
-                const CURRENT_AUTO_SCROLL = Number(localStorage.getItem('ux.auto_scroll') ?? 1)
+                const CURRENT_ALIEN_POSTS    = Number(__temp_url.searchParams.get('with_alien_wall_posts') ?? 0)
                 const COUNT = [1, 5, 10, 20, 30, 40, 50]
                 u('#_feed_settings_container #__content').html(`
-                    <table cellspacing="7" cellpadding="0" border="0" align="center">
+                    <table class="flexible_table" cellspacing="7" cellpadding="0" border="0" align="center">
                         <tbody>
                             <tr>
                                 <td width="120" valign="top">
@@ -105,7 +152,7 @@ u(document).on('click', '#__feed_settings_link', (e) => {
                                     <input type='number' min='1' max='${PAGES_COUNT}' id='pageNumber' value='${CURRENT_PAGE}' placeholder='${CURRENT_PAGE}'>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="not_flexible_tr">
                                 <td width="120" valign="top">
                                     <span class="nobold">
                                         <input type='checkbox' name='showIgnored' id="showIgnored" ${CURRENT_RETURN_BANNED == 1 ? 'checked' : ''}>
@@ -118,11 +165,11 @@ u(document).on('click', '#__feed_settings_link', (e) => {
                             <tr>
                                 <td width="120" valign="top">
                                     <span class="nobold">
-                                        <input type='checkbox' data-act='localstorage_item' name='ux.auto_scroll' id="ux.auto_scroll" ${CURRENT_AUTO_SCROLL == 1 ? 'checked' : ''}>
+                                        <input type='checkbox' name='alienPosts' id="alienPosts" ${CURRENT_ALIEN_POSTS == 1 ? 'checked' : ''}>
                                     </span>
                                 </td>
                                 <td>
-                                    <label for='ux.auto_scroll'>${tr('auto_scroll')}</label>
+                                    <label for='alienPosts'>${tr('with_alien_wall_posts')}</label>
                                 </td>
                             </tr>
                             <tr>
@@ -140,6 +187,7 @@ u(document).on('click', '#__feed_settings_link', (e) => {
                     const INPUT_PAGES_COUNT = parseInt(u('#_feed_settings_container #__content #pageSelect').nodes[0].selectedOptions[0].value ?? '10')
                     const INPUT_PAGE        = parseInt(u('#_feed_settings_container #__content #pageNumber').nodes[0].value ?? '1')
                     const INPUT_IGNORED     = Number(u('#_feed_settings_container #__content #showIgnored').nodes[0].checked ?? false)
+                    const INPUT_ALIEN_POSTS = Number(u('#_feed_settings_container #__content #alienPosts').nodes[0].checked ?? false)
 
                     const FINAL_URL = new URL(location.href)
 
@@ -155,6 +203,12 @@ u(document).on('click', '#__feed_settings_link', (e) => {
                         FINAL_URL.searchParams.set('return_banned', 1)
                     } else {
                         FINAL_URL.searchParams.delete('return_banned')
+                    }
+
+                    if(INPUT_ALIEN_POSTS == 1) {
+                        FINAL_URL.searchParams.set('with_alien_wall_posts', 1)
+                    } else {
+                        FINAL_URL.searchParams.delete('with_alien_wall_posts')
                     }
                     
                     window.router.route(FINAL_URL.href)
@@ -281,5 +335,33 @@ u(document).on('click', '#__feed_settings_link', (e) => {
 })
 
 u(document).on('change', `input[data-act='localstorage_item']`, (e) => {
+    if(e.target.dataset.inverse) {
+        localStorage.setItem(e.target.name, Number(!e.target.checked))
+        return
+    }
+
     localStorage.setItem(e.target.name, Number(e.target.checked))
 })
+
+// i hate it. Why there is >5 report functions ????????????
+function reportPost(postId) {
+            uReportMsgTxt  = tr("going_to_report_post");
+            uReportMsgTxt += "<br/>"+tr("report_question_text");
+            uReportMsgTxt += "<br/><br/><b>"+tr("report_reason")+"</b>: <input type='text' id='uReportMsgInput' placeholder='" + tr("reason") + "' />"
+
+            MessageBox(tr("report_question"), uReportMsgTxt, [tr("confirm_m"), tr("cancel")], [
+                (function() {
+                    res = document.querySelector("#uReportMsgInput").value;
+                    xhr = new XMLHttpRequest();
+                    xhr.open("GET", "/report/" + postId + "?reason=" + res + "&type=post", true);
+                    xhr.onload = (function() {
+                        if(xhr.responseText.indexOf("reason") === -1)
+                            MessageBox(tr("error"), tr("error_sending_report"), ["OK"], [Function.noop]);
+                        else
+                            MessageBox(tr("action_successfully"), tr("will_be_watched"), ["OK"], [Function.noop]);
+                    });
+                    xhr.send(null);
+                }),
+                Function.noop
+            ]);
+        }
